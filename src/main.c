@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
+#include <libgen.h>
+#include <limits.h>
+#include <unistd.h>
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_launch.h>
@@ -97,20 +101,50 @@ int main(int argc, char **argv)
 {
     int ret;
 
+    /* Resolve base directory from /proc/self/exe */
+    char base_dir[PATH_MAX];
+    char real[PATH_MAX];
+    ssize_t rlen = readlink("/proc/self/exe", real, sizeof(real) - 1);
+    if (rlen > 0) {
+        real[rlen] = '\0';
+        char *d = dirname(real);
+        size_t dlen = strlen(d);
+        if (dlen > 6 && strcmp(d + dlen - 6, "/build") == 0)
+            dlen -= 6;
+        memcpy(base_dir, d, dlen);
+        if (dlen > 0 && base_dir[dlen - 1] != '/') {
+            base_dir[dlen] = '/';
+            base_dir[dlen + 1] = '\0';
+        } else {
+            base_dir[dlen] = '\0';
+        }
+    } else {
+        snprintf(base_dir, sizeof(base_dir), "./");
+    }
+
     /* Default config */
     app_config_default(&g_cfg);
 
-    /* Parse config file if provided as argument */
     /* Initialize EAL first (consumes DPDK args) */
     ret = rte_eal_init(argc, argv);
     if (ret < 0)
         rte_exit(EXIT_FAILURE, "Failed to initialize EAL\n");
 
     /* Config path: first non-EAL argument overrides default */
-    const char *cfg_path = "config/hyperdpi.cfg";
-    if (argc > ret)
-        cfg_path = argv[ret];
+    char cfg_path[PATH_MAX];
+    if (argc > ret) {
+        snprintf(cfg_path, sizeof(cfg_path), "%s", argv[ret]);
+    } else {
+        snprintf(cfg_path, sizeof(cfg_path), "%sconfig/hyperdpi.cfg", base_dir);
+    }
     app_config_load(&g_cfg, cfg_path);
+
+    /* Make rules_file relative to base_dir if it's not absolute */
+    if (g_cfg.rules_file[0] != '/') {
+        char abs_rules[PATH_MAX];
+        snprintf(abs_rules, sizeof(abs_rules), "%s%s", base_dir, g_cfg.rules_file);
+        snprintf(g_cfg.rules_file, sizeof(g_cfg.rules_file), "%s", abs_rules);
+    }
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
