@@ -47,7 +47,7 @@ int worker_thread_proc(void *arg)
                 uint32_t sip = rte_be_to_cpu_32(key.src_ip);
                 uint32_t dip = rte_be_to_cpu_32(key.dst_ip);
                 RTE_LOG(NOTICE, USER1,
-                        "MATCH id=%u proto=%u %u.%u.%u.%u:%hu -> %u.%u.%u.%u:%hu\n",
+                        "MATCH id=%u proto=%u %u.%u.%u.%u:%hu -> %u.%u.%u.%u:%hu",
                         matched_id, key.proto,
                         (sip >> 24) & 0xff, (sip >> 16) & 0xff,
                         (sip >> 8) & 0xff, sip & 0xff,
@@ -55,6 +55,42 @@ int worker_thread_proc(void *arg)
                         (dip >> 24) & 0xff, (dip >> 16) & 0xff,
                         (dip >> 8) & 0xff, dip & 0xff,
                         rte_be_to_cpu_16(key.dst_port));
+
+                /* Dump L7 payload as hex + ASCII */
+                char *p = rte_pktmbuf_mtod(mbuf, char *);
+                uint32_t off = sizeof(struct rte_ether_hdr);
+                uint16_t etype = rte_be_to_cpu_16(*(uint16_t *)(p + 12));
+                while (etype == RTE_ETHER_TYPE_VLAN || etype == RTE_ETHER_TYPE_QINQ) {
+                    if (off + 4 > pkt_len) break;
+                    etype = rte_be_to_cpu_16(*(uint16_t *)(p + off + 2));
+                    off += 4;
+                }
+                if (etype == RTE_ETHER_TYPE_IPV4 && off + 20 <= pkt_len) {
+                    uint8_t ihl = p[off] & 0x0f;
+                    uint32_t ip_hdr = off + ihl * 4;
+                    uint8_t proto = p[off + 9];
+                    if (proto == 6 && ip_hdr + 20 <= pkt_len) {
+                        off = ip_hdr + ((p[ip_hdr + 12] >> 4) & 0x0f) * 4;
+                    } else if (proto == 17 && ip_hdr + 8 <= pkt_len) {
+                        off = ip_hdr + 8;
+                    } else {
+                        off = ip_hdr;
+                    }
+                }
+                if (off < pkt_len) {
+                    uint32_t left = pkt_len - off;
+                    if (left > 256) left = 256;
+                    char hex[1024], ascii[300];
+                    int hi = 0, ai = 0;
+                    for (uint32_t j = 0; j < left; j++) {
+                        uint8_t b = (uint8_t)p[off + j];
+                        hi += snprintf(hex + hi, sizeof(hex) - hi, "%02x ", b);
+                        ascii[ai++] = (b >= 32 && b < 127) ? b : '.';
+                    }
+                    ascii[ai] = '\0';
+                    RTE_LOG(NOTICE, USER1, "  PAYLOAD (%u bytes) hex: %s", left, hex);
+                    RTE_LOG(NOTICE, USER1, "  PAYLOAD ascii: %s", ascii);
+                }
             }
 
             __atomic_add_fetch(&cfg->packets_processed, 1, __ATOMIC_RELAXED);
