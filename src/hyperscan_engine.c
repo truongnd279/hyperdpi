@@ -3,16 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <rte_ether.h>
 #include <rte_malloc.h>
 #include <rte_log.h>
-#include <rte_ip.h>
-#include <rte_tcp.h>
-#include <rte_udp.h>
 
 struct match_context {
     unsigned int matched_id;
     int matched;
+    int action;
+    struct hs_engine *eng;
 };
 
 static int event_handler(unsigned int id, unsigned long long from,
@@ -25,19 +23,9 @@ static int event_handler(unsigned int id, unsigned long long from,
     struct match_context *mc = (struct match_context *)ctx;
     mc->matched = 1;
     mc->matched_id = id;
+    if (id < (unsigned int)mc->eng->nb_rules)
+        mc->action = mc->eng->rules[id].action;
     return 1;
-}
-
-static int is_valid_pattern(char *pattern)
-{
-    size_t plen = strlen(pattern);
-    if (plen < 2) return 0;
-    if (pattern[0] == '/' && pattern[plen - 1] == '/') {
-        memmove(pattern, pattern + 1, plen - 2);
-        pattern[plen - 2] = '\0';
-        return 1;
-    }
-    return 0;
 }
 
 struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
@@ -62,7 +50,6 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
         return NULL;
     }
 
-    /* Temporary storage for hs_compile_multi */
     char *patterns[MAX_PATTERNS];
     unsigned int flags[MAX_PATTERNS];
     unsigned int ids[MAX_PATTERNS];
@@ -71,28 +58,27 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
     char line[MAX_RULE_LINE];
 
     while (fgets(line, sizeof(line), fp)) {
-        if (line[0] == '#' || line[0] == '\n') continue;
-
-        char pattern[512], protocol[16], desc[256];
-        unsigned int id;
-        if (sscanf(line, "%u,%511[^,],%15[^,],%255[^\r\n]",
-                   &id, pattern, protocol, desc) < 4)
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
             continue;
 
-        if (!is_valid_pattern(pattern)) {
-            RTE_LOG(WARNING, USER1, "Pattern %u: malformed regex (missing //)\n", id);
+        char traffic_type[16], pattern[512], action_str[16];
+        if (sscanf(line, "%15[^,],%511[^,],%15[^\r\n]",
+                   traffic_type, pattern, action_str) < 3)
             continue;
-        }
+
+        int action = HS_ACTION_FORWARD;
+        if (strcmp(action_str, "DROP") == 0)
+            action = HS_ACTION_DROP;
 
         struct hs_rule *r = &eng->rules[eng->nb_rules];
-        r->id = id;
+        r->id = eng->nb_rules;
         snprintf(r->pattern, sizeof(r->pattern), "%s", pattern);
-        snprintf(r->protocol, sizeof(r->protocol), "%s", protocol);
-        snprintf(r->description, sizeof(r->description), "%s", desc);
+        snprintf(r->traffic_type, sizeof(r->traffic_type), "%s", traffic_type);
+        r->action = action;
 
         patterns[valid_count] = r->pattern;
         flags[valid_count] = HS_FLAG_CASELESS;
-        ids[valid_count] = id;
+        ids[valid_count] = eng->nb_rules;
         valid_count++;
         eng->nb_rules++;
     }
@@ -163,68 +149,28 @@ void hs_engine_destroy(struct hs_engine *eng)
     rte_free(eng);
 }
 
-int hs_engine_scan(struct hs_engine *eng, const struct rte_mbuf *mbuf,
-                   unsigned int *matched_id, hs_scratch_t *scratch)
+int hs_engine_scan(struct hs_engine *eng, const char *data, unsigned int len,
+                   struct hs_match_result *result, hs_scratch_t *scratch)
 {
-    if (!eng || !eng->db) return -1;
+    if (!eng || !eng->db || !result) return -1;
 
     if (!scratch) scratch = eng->scratch;
     if (!scratch) return -1;
 
-    char *payload = rte_pktmbuf_mtod(mbuf, char *);
-    uint32_t pkt_len = rte_pktmbuf_pkt_len(mbuf);
+    struct match_context mc = {
+        .matched = 0,
+        .matched_id = 0,
+        .action = HS_ACTION_FORWARD,
+        .eng = eng,
+    };
 
-    if (pkt_len < sizeof(struct rte_ether_hdr)) return -1;
-    struct rte_ether_hdr *eth = (struct rte_ether_hdr *)payload;
-    uint32_t offset = sizeof(struct rte_ether_hdr);
-
-    uint16_t ether_type = rte_be_to_cpu_16(eth->ether_type);
-    while (ether_type == RTE_ETHER_TYPE_VLAN || ether_type == RTE_ETHER_TYPE_QINQ) {
-        if (pkt_len < offset + sizeof(struct rte_vlan_hdr)) return -1;
-        struct rte_vlan_hdr *vlan = (struct rte_vlan_hdr *)(payload + offset);
-        offset += sizeof(struct rte_vlan_hdr);
-        ether_type = rte_be_to_cpu_16(vlan->eth_proto);
-    }
-
-    if (ether_type == RTE_ETHER_TYPE_IPV4) {
-        if (pkt_len < offset + sizeof(struct rte_ipv4_hdr)) return -1;
-        struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)(payload + offset);
-        uint32_t ip_hdr_len = (ip->version_ihl & 0x0f) * 4;
-        if (ip_hdr_len < sizeof(struct rte_ipv4_hdr)) return -1;
-        if (pkt_len < offset + ip_hdr_len) return -1;
-        offset += ip_hdr_len;
-
-        if (ip->next_proto_id == IPPROTO_TCP) {
-            if (pkt_len < offset + sizeof(struct rte_tcp_hdr)) return -1;
-            struct rte_tcp_hdr *tcp = (struct rte_tcp_hdr *)(payload + offset);
-            uint32_t tcp_hdr_len = ((tcp->data_off >> 4) & 0x0f) * 4;
-            if (tcp_hdr_len < sizeof(struct rte_tcp_hdr)) return -1;
-            if (pkt_len < offset + tcp_hdr_len) return -1;
-            offset += tcp_hdr_len;
-        } else if (ip->next_proto_id == IPPROTO_UDP) {
-            if (pkt_len < offset + sizeof(struct rte_udp_hdr)) return -1;
-            offset += sizeof(struct rte_udp_hdr);
-        }
-    } else if (ether_type == RTE_ETHER_TYPE_IPV6) {
-        if (pkt_len < offset + sizeof(struct rte_ipv6_hdr)) return -1;
-        offset += sizeof(struct rte_ipv6_hdr);
-    }
-
-    if (offset >= pkt_len) return -1;
-
-    uint32_t payload_len = pkt_len - offset;
-    char *app_data = payload + offset;
-
-    struct match_context mc = { .matched = 0, .matched_id = 0 };
-
-    hs_error_t err = hs_scan(eng->db, app_data, payload_len, 0,
+    hs_error_t err = hs_scan(eng->db, data, len, 0,
                              scratch, event_handler, &mc);
     if (err != HS_SUCCESS && err != HS_SCAN_TERMINATED)
         return -1;
 
-    if (mc.matched) {
-        *matched_id = mc.matched_id;
-        return 0;
-    }
-    return -1;
+    result->matched = mc.matched;
+    result->rule_id = mc.matched_id;
+    result->action = mc.action;
+    return mc.matched ? 0 : -1;
 }

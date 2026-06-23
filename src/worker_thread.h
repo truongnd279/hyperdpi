@@ -20,6 +20,11 @@ struct worker_thread_config {
     uint64_t packets_processed;
     uint64_t bytes_processed;
     uint64_t packets_matched;
+    uint64_t http_packets;
+    uint64_t https_packets;
+    uint64_t non_dpi_packets;
+    uint64_t packets_dropped;
+    uint64_t packets_forwarded;
 };
 
 int worker_thread_proc(void *arg);
