@@ -29,7 +29,7 @@ static struct worker_thread_config *g_worker_cfgs = NULL;
 static struct tx_thread_config g_tx_cfg;
 static struct stats_thread_config g_stats_cfg;
 
-static volatile int g_quit = 0;
+volatile int g_quit = 0;
 
 static void signal_handler(int sig)
 {

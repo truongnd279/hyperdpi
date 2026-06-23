@@ -28,6 +28,18 @@ static int event_handler(unsigned int id, unsigned long long from,
     return 1;
 }
 
+static int is_valid_pattern(char *pattern)
+{
+    size_t plen = strlen(pattern);
+    if (plen < 2) return 0;
+    if (pattern[0] == '/' && pattern[plen - 1] == '/') {
+        memmove(pattern, pattern + 1, plen - 2);
+        pattern[plen - 2] = '\0';
+        return 1;
+    }
+    return 0;
+}
+
 struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
 {
     struct hs_engine *eng = rte_zmalloc("hs_engine", sizeof(*eng), 0);
@@ -50,12 +62,13 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
         return NULL;
     }
 
-    hs_database_t *db = NULL;
-    hs_compile_error_t *compile_err = NULL;
-    hs_scratch_t *scratch = NULL;
+    /* Temporary storage for hs_compile_multi */
+    char *patterns[MAX_PATTERNS];
+    unsigned int flags[MAX_PATTERNS];
+    unsigned int ids[MAX_PATTERNS];
+    int valid_count = 0;
 
     char line[MAX_RULE_LINE];
-    int nb_patterns = 0;
 
     while (fgets(line, sizeof(line), fp)) {
         if (line[0] == '#' || line[0] == '\n') continue;
@@ -66,55 +79,57 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
                    &id, pattern, protocol, desc) < 4)
             continue;
 
+        if (!is_valid_pattern(pattern)) {
+            RTE_LOG(WARNING, USER1, "Pattern %u: malformed regex (missing //)\n", id);
+            continue;
+        }
+
         struct hs_rule *r = &eng->rules[eng->nb_rules];
         r->id = id;
-        
         snprintf(r->pattern, sizeof(r->pattern), "%s", pattern);
         snprintf(r->protocol, sizeof(r->protocol), "%s", protocol);
         snprintf(r->description, sizeof(r->description), "%s", desc);
 
-        size_t plen = strlen(pattern);
-        if (plen >= 2 && pattern[0] == '/' && pattern[plen-1] == '/') {
-            memmove(pattern, pattern + 1, plen - 2);
-            pattern[plen - 2] = '\0';
-        }
-
-        hs_database_t *tmp_db = NULL;
-        hs_compile_error_t *tmp_err = NULL;
-        hs_compile(pattern, HS_FLAG_CASELESS, id, NULL, &tmp_db, &tmp_err);
-
-        if (tmp_err) {
-            RTE_LOG(WARNING, USER1, "Pattern %u compile error: %s\n",
-                    id, tmp_err->message);
-            hs_free_compile_error(tmp_err);
-            continue;
-        }
-
-        if (!db) {
-            db = tmp_db;
-        } else {
-            hs_database_t *combined = NULL;
-            hs_error_t err = hs_combine_database(db, tmp_db, &combined);
-            if (err == HS_SUCCESS && combined) {
-                hs_free_database(db);
-                db = combined;
-            }
-            hs_free_database(tmp_db);
-        }
-
+        patterns[valid_count] = r->pattern;
+        flags[valid_count] = HS_FLAG_CASELESS;
+        ids[valid_count] = id;
+        valid_count++;
         eng->nb_rules++;
-        nb_patterns++;
     }
     fclose(fp);
 
-    if (!db) {
-        RTE_LOG(ERR, USER1, "No valid patterns compiled\n");
+    if (valid_count == 0) {
+        RTE_LOG(ERR, USER1, "No valid patterns found\n");
         rte_free(eng->rules);
         rte_free(eng);
         return NULL;
     }
 
-    hs_error_t err = hs_alloc_scratch(db, &scratch);
+    hs_database_t *db = NULL;
+    hs_compile_error_t *compile_err = NULL;
+    hs_error_t err = hs_compile_multi(
+        (const char *const *)patterns,
+        flags, ids, valid_count, mode, NULL,
+        &db, &compile_err);
+
+    if (compile_err) {
+        RTE_LOG(ERR, USER1, "Pattern compilation failed at index %u: %s\n",
+                compile_err->expression, compile_err->message);
+        hs_free_compile_error(compile_err);
+        rte_free(eng->rules);
+        rte_free(eng);
+        return NULL;
+    }
+
+    if (err != HS_SUCCESS) {
+        RTE_LOG(ERR, USER1, "hs_compile_multi failed: %d\n", err);
+        rte_free(eng->rules);
+        rte_free(eng);
+        return NULL;
+    }
+
+    hs_scratch_t *scratch = NULL;
+    err = hs_alloc_scratch(db, &scratch);
     if (err != HS_SUCCESS) {
         RTE_LOG(ERR, USER1, "Failed to allocate Hyperscan scratch\n");
         hs_free_database(db);
