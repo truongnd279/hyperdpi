@@ -26,7 +26,7 @@ struct flow_table *flow_table_create(uint32_t max_entries)
         .hash_func = rte_jhash,
         .hash_func_init_val = 0,
         .socket_id = rte_socket_id(),
-        .extra_flag = RTE_HASH_EXTRA_FLAGS_MULTI_WRITER,
+        .extra_flag = RTE_HASH_EXTRA_FLAGS_MULTI_WRITER_ADD,
     };
     ft->hash = rte_hash_create(&hp);
     if (!ft->hash) {

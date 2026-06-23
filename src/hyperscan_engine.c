@@ -94,7 +94,7 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
             db = tmp_db;
         } else {
             hs_database_t *combined = NULL;
-            hs_error_t err = hs_combine_db(db, tmp_db, &combined);
+            hs_error_t err = hs_combine_database(db, tmp_db, &combined);
             if (err == HS_SUCCESS && combined) {
                 hs_free_database(db);
                 db = combined;
