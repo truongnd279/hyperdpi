@@ -1,0 +1,15 @@
+# HyperDPI Pattern Rules
+# Format: id,pattern,protocol,description
+# Pattern syntax: Hyperscan regex
+
+1000,/http/,tcp,HTTP traffic detection
+1001,/https/,tcp,HTTPS traffic detection
+1002,/dns/,udp,DNS traffic detection
+1003,/mysql/,tcp,MySQL protocol detection
+1004,/ssh/,tcp,SSH protocol detection
+1005,/ftp/,tcp,FTP protocol detection
+1006,/smtp/,tcp,SMTP traffic detection
+1007,/pop3/,tcp,POP3 traffic detection
+1008,/imap/,tcp,IMAP traffic detection
+1009,/dht/,udp,BitTorrent DHT detection
+1010,/torrent/,tcp,BitTorrent protocol detection
