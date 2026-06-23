@@ -1,15 +1,59 @@
 # HyperDPI Pattern Rules
 # Format: id,pattern,protocol,description
-# Pattern syntax: Hyperscan regex
+# Pattern syntax: Hyperscan regex (case-insensitive)
 
-1000,/http/,tcp,HTTP traffic detection
-1001,/https/,tcp,HTTPS traffic detection
-1002,/dns/,udp,DNS traffic detection
-1003,/mysql/,tcp,MySQL protocol detection
-1004,/ssh/,tcp,SSH protocol detection
-1005,/ftp/,tcp,FTP protocol detection
-1006,/smtp/,tcp,SMTP traffic detection
-1007,/pop3/,tcp,POP3 traffic detection
-1008,/imap/,tcp,IMAP traffic detection
-1009,/dht/,udp,BitTorrent DHT detection
-1010,/torrent/,tcp,BitTorrent protocol detection
+# ====== Web ======
+1000,/http/,tcp,HTTP traffic
+1001,/https/,tcp,HTTPS traffic
+1002,/get |post |put |delete |head /,tcp,HTTP method
+1003,/Host:/,tcp,HTTP Host header
+1004,/GET /,tcp,HTTP GET request
+
+# ====== Email ======
+1005,/smtp/,tcp,SMTP traffic
+1006,/pop3/,tcp,POP3 traffic
+1007,/imap/,tcp,IMAP traffic
+
+# ====== Remote access ======
+1008,/ssh/,tcp,SSH traffic
+1009,/telnet/,tcp,Telnet traffic
+1010,/OpenSSH/,tcp,OpenSSH banner
+
+# ====== Database ======
+1011,/mysql/,tcp,MySQL protocol
+1012,/postgresql/,tcp,PostgreSQL protocol
+1013,/redis/,tcp,Redis protocol
+1014,/mongodb/,tcp,MongoDB protocol
+
+# ====== File transfer ======
+1015,/ftp/,tcp,FTP traffic
+1016,/sftp/,tcp,SFTP traffic
+1017,/BitTorrent/,tcp,BitTorrent protocol
+1018,/dht/,udp,BitTorrent DHT
+
+# ====== Network protocols ======
+1019,/DHCP/,udp,DHCP traffic
+1020,/dns/,udp,DNS traffic
+1021,/NTP/,udp,NTP traffic
+1022,/SNMP/,udp,SNMP traffic
+1023,/LDAP/,tcp,LDAP traffic
+
+# ====== ICMP ======
+1024,/echo/,icmp,ICMP Echo request/reply
+1025,/destination unreachable/,icmp,ICMP Destination unreachable
+
+# ====== Common services ======
+1026,/SMB/,tcp,SMB/CIFS traffic
+1027,/RDP/,tcp,RDP traffic
+1028,/VNC/,tcp,VNC traffic
+1029,/DHCPACK/,udp,DHCP ACK
+1030,/DHCPREQUEST/,udp,DHCP Request
+
+# ====== IoT / Media ======
+1031,/MQTT/,tcp,MQTT protocol
+1032,/RTSP/,tcp,RTSP streaming
+1033,/SIP/,udp,SIP VoIP traffic
+
+# ====== Security ======
+1034,/SSL/,tcp,SSL/TLS traffic
+1035,/TLS/,tcp,TLS handshake
