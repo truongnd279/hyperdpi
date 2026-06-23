@@ -215,30 +215,16 @@ int hs_engine_scan(struct hs_engine *eng, const struct rte_mbuf *mbuf,
     uint32_t payload_len = pkt_len - offset;
     char *app_data = payload + offset;
 
-    RTE_LOG(DEBUG, USER1, "Scanning %u bytes: offset=%u, payload_len=%u\n",
-            pkt_len, offset, payload_len);
-    if (payload_len > 0) {
-        char buf[128];
-        uint32_t copy = payload_len < 127 ? payload_len : 127;
-        memcpy(buf, app_data, copy);
-        buf[copy] = '\0';
-        RTE_LOG(DEBUG, USER1, "Payload: %s\n", buf);
-    }
-
     struct match_context mc = { .matched = 0, .matched_id = 0 };
 
     hs_error_t err = hs_scan(eng->db, app_data, payload_len, 0,
                              scratch, event_handler, &mc);
-    if (err != HS_SUCCESS) {
-        RTE_LOG(DEBUG, USER1, "hs_scan returned %d\n", err);
+    if (err != HS_SUCCESS && err != HS_SCAN_TERMINATED)
         return -1;
-    }
 
     if (mc.matched) {
         *matched_id = mc.matched_id;
-        RTE_LOG(DEBUG, USER1, "Match found: id=%u\n", mc.matched_id);
         return 0;
     }
-    RTE_LOG(DEBUG, USER1, "No match\n");
     return -1;
 }
