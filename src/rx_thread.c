@@ -1,10 +1,13 @@
 #include "rx_thread.h"
 #include "flow_table.h"
+#include "app_config.h"
 
 #include <rte_ethdev.h>
 #include <rte_jhash.h>
 #include <rte_log.h>
 #include <rte_pause.h>
+
+extern volatile int g_quit;
 
 int rx_thread_proc(void *arg)
 {
@@ -13,12 +16,14 @@ int rx_thread_proc(void *arg)
     RTE_LOG(INFO, USER1, "RX thread started on lcore %u, port %u\n",
             cfg->lcore_id, cfg->port_id);
 
-    struct rte_mbuf *pkts_burst[cfg->burst_size];
+    struct rte_mbuf *pkts_burst[MAX_BURST_SIZE];
     uint64_t total_pkts = 0;
 
-    while (1) {
+    while (!g_quit) {
+        uint16_t burst = cfg->burst_size;
+        if (burst > MAX_BURST_SIZE) burst = MAX_BURST_SIZE;
         uint16_t nb_rx = rte_eth_rx_burst(cfg->port_id, 0,
-                                          pkts_burst, cfg->burst_size);
+                                          pkts_burst, burst);
         if (nb_rx == 0) {
             rte_pause();
             continue;

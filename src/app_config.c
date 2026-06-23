@@ -1,5 +1,6 @@
 #include "app_config.h"
 
+#include <hs/hs.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -60,6 +61,7 @@ static int parse_line(struct app_config *cfg, const char *line)
         char *p = val, *tok;
         cfg->nb_workers = 0;
         while ((tok = strtok(p, ",")) != NULL) {
+            if (cfg->nb_workers >= MAX_WORKERS) break;
             cfg->worker_lcores[cfg->nb_workers++] = atoi(tok);
             p = NULL;
         }

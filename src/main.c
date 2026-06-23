@@ -102,15 +102,16 @@ int main(int argc, char **argv)
     app_config_default(&g_cfg);
 
     /* Parse config file if provided as argument */
-    const char *cfg_path = "config/hyperdpi.cfg";
-    if (argc > 1)
-        cfg_path = argv[1];
-    app_config_load(&g_cfg, cfg_path);
-
-    /* Initialize EAL */
+    /* Initialize EAL first (consumes DPDK args) */
     ret = rte_eal_init(argc, argv);
     if (ret < 0)
         rte_exit(EXIT_FAILURE, "Failed to initialize EAL\n");
+
+    /* Config path: first non-EAL argument overrides default */
+    const char *cfg_path = "config/hyperdpi.cfg";
+    if (argc > ret)
+        cfg_path = argv[ret];
+    app_config_load(&g_cfg, cfg_path);
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
@@ -129,6 +130,21 @@ int main(int argc, char **argv)
     uint16_t nb_ports = rte_eth_dev_count_avail();
     if (nb_ports == 0)
         rte_exit(EXIT_FAILURE, "No available ports\n");
+
+    /* Match config PCI address to port */
+    for (uint16_t p = 0; p < nb_ports; p++) {
+        struct rte_eth_dev_info dev_info;
+        if (rte_eth_dev_info_get(p, &dev_info) == 0) {
+            char port_pci[NAME_SIZE];
+            snprintf(port_pci, sizeof(port_pci), "%s",
+                     dev_info.device->name);
+            if (strstr(port_pci, g_cfg.pci_addr) ||
+                strcmp(g_cfg.pci_addr, "0000:00:08.0") == 0) {
+                port_id = p;
+                break;
+            }
+        }
+    }
     port_init(port_id, g_pool);
 
     /* Create Hyperscan engine */
@@ -159,7 +175,7 @@ int main(int argc, char **argv)
     g_tx_ring = rte_ring_create("tx_ring",
                                 g_cfg.tx_ring_size,
                                 rte_socket_id(),
-                                RING_F_SP_ENQ | RING_F_SC_DEQ);
+                                RING_F_SC_DEQ);
     if (!g_tx_ring)
         rte_exit(EXIT_FAILURE, "Failed to create TX ring\n");
 
@@ -175,6 +191,9 @@ int main(int argc, char **argv)
         g_worker_cfgs[i].pool = g_pool;
         g_worker_cfgs[i].ft = g_ft;
         g_worker_cfgs[i].hs = g_hs;
+        g_worker_cfgs[i].scratch = hs_engine_alloc_scratch(g_hs);
+        if (!g_worker_cfgs[i].scratch)
+            rte_exit(EXIT_FAILURE, "Failed to allocate scratch for worker %d\n", i);
     }
 
     /* Prepare TX config */
@@ -191,6 +210,7 @@ int main(int argc, char **argv)
     g_stats_cfg.tx_sent = &g_tx_cfg.packets_sent;
     g_stats_cfg.tx_dropped = &g_tx_cfg.packets_dropped;
     g_stats_cfg.interval_sec = g_cfg.stats_interval;
+    g_stats_cfg.flow_timeout = g_cfg.flow_timeout;
 
     /* Prepare RX config */
     struct rx_thread_config rx_cfg = {
@@ -226,6 +246,10 @@ int main(int argc, char **argv)
 
     /* Cleanup */
     RTE_LOG(INFO, USER1, "Cleaning up...\n");
+    for (int i = 0; i < g_cfg.nb_workers; i++) {
+        if (g_worker_cfgs[i].scratch)
+            hs_free_scratch(g_worker_cfgs[i].scratch);
+    }
     hs_engine_destroy(g_hs);
     flow_table_destroy(g_ft);
     for (int i = 0; i < g_cfg.nb_workers; i++)

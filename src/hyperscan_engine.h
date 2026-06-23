@@ -25,7 +25,9 @@ struct hs_engine {
 struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode);
 void hs_engine_destroy(struct hs_engine *eng);
 
+hs_scratch_t *hs_engine_alloc_scratch(struct hs_engine *eng);
+
 int hs_engine_scan(struct hs_engine *eng, const struct rte_mbuf *mbuf,
-                   unsigned int *matched_id);
+                   unsigned int *matched_id, hs_scratch_t *scratch);
 
 #endif /* HYPERDPI_HYPERSCAN_ENGINE_H */

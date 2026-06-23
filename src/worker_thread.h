@@ -16,6 +16,7 @@ struct worker_thread_config {
     struct rte_mempool *pool;
     struct flow_table *ft;
     struct hs_engine *hs;
+    hs_scratch_t *scratch;
     uint64_t packets_processed;
     uint64_t bytes_processed;
     uint64_t packets_matched;

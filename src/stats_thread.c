@@ -5,6 +5,9 @@
 #include <rte_cycles.h>
 #include <rte_ethdev.h>
 #include <stdio.h>
+#include <unistd.h>
+
+extern volatile int g_quit;
 
 int stats_thread_proc(void *arg)
 {
@@ -27,8 +30,9 @@ int stats_thread_proc(void *arg)
 
     uint64_t iter = 0;
 
-    while (1) {
-        rte_delay_us(cfg->interval_sec * 1000000);
+    while (!g_quit) {
+        sleep(cfg->interval_sec);
+        if (g_quit) break;
         iter++;
 
         uint64_t total_pkts = 0, total_bytes = 0, total_matched = 0;
@@ -36,9 +40,16 @@ int stats_thread_proc(void *arg)
         printf("\n========== HyperDPI Stats [%lu] ==========\n", iter);
 
         for (int i = 0; i < cfg->nb_workers; i++) {
-            uint64_t dp = cfg->worker_cfgs[i].packets_processed - prev_worker_pkts[i];
-            uint64_t db = cfg->worker_cfgs[i].bytes_processed - prev_worker_bytes[i];
-            uint64_t dm = cfg->worker_cfgs[i].packets_matched - prev_worker_matched[i];
+            uint64_t cur_pkts = __atomic_load_n(
+                &cfg->worker_cfgs[i].packets_processed, __ATOMIC_RELAXED);
+            uint64_t cur_bytes = __atomic_load_n(
+                &cfg->worker_cfgs[i].bytes_processed, __ATOMIC_RELAXED);
+            uint64_t cur_matched = __atomic_load_n(
+                &cfg->worker_cfgs[i].packets_matched, __ATOMIC_RELAXED);
+
+            uint64_t dp = cur_pkts - prev_worker_pkts[i];
+            uint64_t db = cur_bytes - prev_worker_bytes[i];
+            uint64_t dm = cur_matched - prev_worker_matched[i];
 
             total_pkts += dp;
             total_bytes += db;
@@ -47,13 +58,15 @@ int stats_thread_proc(void *arg)
             printf("Worker %d: %lu pkts, %lu bytes, %lu matched\n",
                    i, dp, db, dm);
 
-            prev_worker_pkts[i] = cfg->worker_cfgs[i].packets_processed;
-            prev_worker_bytes[i] = cfg->worker_cfgs[i].bytes_processed;
-            prev_worker_matched[i] = cfg->worker_cfgs[i].packets_matched;
+            prev_worker_pkts[i] = cur_pkts;
+            prev_worker_bytes[i] = cur_bytes;
+            prev_worker_matched[i] = cur_matched;
         }
 
-        uint64_t tx_sent = *cfg->tx_sent - prev_tx_sent;
-        uint64_t tx_dropped = *cfg->tx_dropped - prev_tx_dropped;
+        uint64_t cur_tx_sent = __atomic_load_n(cfg->tx_sent, __ATOMIC_RELAXED);
+        uint64_t cur_tx_dropped = __atomic_load_n(cfg->tx_dropped, __ATOMIC_RELAXED);
+        uint64_t tx_sent = cur_tx_sent - prev_tx_sent;
+        uint64_t tx_dropped = cur_tx_dropped - prev_tx_dropped;
 
         printf("TX: %lu sent, %lu dropped\n", tx_sent, tx_dropped);
         printf("Total: %lu pkts, %lu bytes, %lu matched\n",
@@ -68,10 +81,10 @@ int stats_thread_proc(void *arg)
         printf("=========================================\n");
         fflush(stdout);
 
-        prev_tx_sent = *cfg->tx_sent;
-        prev_tx_dropped = *cfg->tx_dropped;
+        prev_tx_sent = cur_tx_sent;
+        prev_tx_dropped = cur_tx_dropped;
 
-        flow_table_cleanup(cfg->ft, cfg->interval_sec);
+        flow_table_cleanup(cfg->ft, cfg->flow_timeout);
     }
 
     return 0;

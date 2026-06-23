@@ -14,6 +14,7 @@ struct stats_thread_config {
     uint64_t *tx_sent;
     uint64_t *tx_dropped;
     uint32_t interval_sec;
+    uint32_t flow_timeout;
 };
 
 int stats_thread_proc(void *arg);
