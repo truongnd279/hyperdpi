@@ -81,7 +81,7 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
 
         hs_database_t *tmp_db = NULL;
         hs_compile_error_t *tmp_err = NULL;
-        hs_compile(pattern, mode, HS_EXT_FLAG_CASELESS, id, &tmp_db, &tmp_err);
+        hs_compile(pattern, HS_FLAG_CASELESS, id, NULL, &tmp_db, &tmp_err);
 
         if (tmp_err) {
             RTE_LOG(WARNING, USER1, "Pattern %u compile error: %s\n",
@@ -94,7 +94,7 @@ struct hs_engine *hs_engine_create(const char *rules_file, unsigned int mode)
             db = tmp_db;
         } else {
             hs_database_t *combined = NULL;
-            hs_error_t err = hs_combine(db, tmp_db, NULL, 0, &combined);
+            hs_error_t err = hs_combine_db(db, tmp_db, &combined);
             if (err == HS_SUCCESS && combined) {
                 hs_free_database(db);
                 db = combined;

@@ -52,11 +52,10 @@ static int port_init(uint16_t port_id, struct rte_mempool *pool)
 
     struct rte_eth_conf port_conf = {
         .rxmode = {
-            .max_rx_pkt_len = RTE_ETHER_MAX_LEN,
-            .split_hdr_size = 0,
+            .max_lro_pkt_size = RTE_ETHER_MAX_LEN,
         },
         .txmode = {
-            .offloads = DEV_TX_OFFLOAD_MBUF_FAST_FREE,
+            .offloads = RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE,
         },
     };
 
@@ -136,8 +135,7 @@ int main(int argc, char **argv)
         struct rte_eth_dev_info dev_info;
         if (rte_eth_dev_info_get(p, &dev_info) == 0) {
             char port_pci[NAME_SIZE];
-            snprintf(port_pci, sizeof(port_pci), "%s",
-                     dev_info.device->name);
+            rte_eth_dev_get_name_by_port(p, port_pci);
             if (strstr(port_pci, g_cfg.pci_addr) ||
                 strcmp(g_cfg.pci_addr, "0000:00:08.0") == 0) {
                 port_id = p;

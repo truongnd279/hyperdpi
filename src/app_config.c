@@ -42,7 +42,7 @@ static int parse_line(struct app_config *cfg, const char *line)
         return -1;
 
     if (strcmp(key, "pci_addr") == 0)
-        snprintf(cfg->pci_addr, sizeof(cfg->pci_addr), "%s", val);
+        snprintf(cfg->pci_addr, sizeof(cfg->pci_addr), "%.63s", val);
     else if (strcmp(key, "nb_rx_desc") == 0)
         cfg->nb_rx_desc = atoi(val);
     else if (strcmp(key, "nb_tx_desc") == 0)

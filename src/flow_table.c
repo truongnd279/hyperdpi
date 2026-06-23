@@ -5,7 +5,6 @@
 #include <rte_malloc.h>
 #include <rte_cycles.h>
 #include <rte_byteorder.h>
-#include <rte_ip6.h>
 #include <string.h>
 
 struct flow_table {
