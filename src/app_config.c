@@ -13,7 +13,7 @@ void app_config_default(struct app_config *cfg)
     cfg->nb_tx_desc = 2048;
     cfg->mempool_size = 65535;
     cfg->mempool_cache = 256;
-    cfg->burst_size = 64;
+    cfg->burst_size = 32;
 
     cfg->rx_lcore = 1;
     cfg->tx_lcore = 2;
@@ -30,9 +30,9 @@ void app_config_default(struct app_config *cfg)
     cfg->max_flows = 1048576;
     cfg->flow_timeout = 60;
 
-    snprintf(cfg->rules_file, sizeof(cfg->rules_file), "rules/dpi_rules.txt");
+    snprintf(cfg->rules_file, sizeof(cfg->rules_file), "rules/patterns.txt");
     cfg->hs_mode = HS_MODE_BLOCK;
-    cfg->stats_interval = 5;
+    cfg->stats_interval = 1;
 }
 
 static int parse_line(struct app_config *cfg, const char *line)

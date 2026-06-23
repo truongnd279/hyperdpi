@@ -7,7 +7,7 @@
 #define MAX_LCORE_STR         256
 #define MAX_RULES_PATH        512
 #define NAME_SIZE             64
-#define MAX_BURST_SIZE        64
+#define MAX_BURST_SIZE        32
 
 struct app_config {
     /* DPDK */

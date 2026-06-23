@@ -1,0 +1,20 @@
+# HyperDPI Pattern Rules
+# Format: Traffic_Type,Regex_Pattern,Action
+# Traffic_Type: HTTP or HTTPS
+# Regex_Pattern: Hyperscan regex (case-insensitive, no // wrapping)
+# Action: DROP or FORWARD
+
+# ====== HTTP rules ======
+HTTP,http://malware.com.*,DROP
+HTTP,http://evil.org.*,DROP
+HTTP,.*/admin.*,DROP
+HTTP,http://trusted.com.*,FORWARD
+HTTP,.*login.*,FORWARD
+HTTP,.*Host:.*example.com.*,FORWARD
+
+# ====== HTTPS rules (SNI) ======
+HTTPS,HOST://bad-gambling.net.*,DROP
+HTTPS,HOST://.*facebook.com.*,FORWARD
+HTTPS,HOST://.*google.com.*,FORWARD
+HTTPS,HOST://.*youtube.com.*,FORWARD
+HTTPS,HOST://.*github.com.*,FORWARD
