@@ -16,17 +16,11 @@ int stats_thread_proc(void *arg)
     RTE_LOG(INFO, USER1, "Stats thread started on lcore %u\n",
             cfg->lcore_id);
 
-    uint64_t prev_worker_pkts[MAX_WORKERS];
-    uint64_t prev_worker_bytes[MAX_WORKERS];
-    uint64_t prev_worker_matched[MAX_WORKERS];
+    uint64_t prev_worker_pkts[MAX_WORKERS] = {0};
+    uint64_t prev_worker_bytes[MAX_WORKERS] = {0};
+    uint64_t prev_worker_matched[MAX_WORKERS] = {0};
     uint64_t prev_tx_sent = 0;
     uint64_t prev_tx_dropped = 0;
-
-    for (int i = 0; i < cfg->nb_workers; i++) {
-        prev_worker_pkts[i] = cfg->worker_cfgs[i].packets_processed;
-        prev_worker_bytes[i] = cfg->worker_cfgs[i].bytes_processed;
-        prev_worker_matched[i] = cfg->worker_cfgs[i].packets_matched;
-    }
 
     uint64_t iter = 0;
 
@@ -55,8 +49,8 @@ int stats_thread_proc(void *arg)
             total_bytes += db;
             total_matched += dm;
 
-            printf("Worker %d: %lu pkts, %lu bytes, %lu matched\n",
-                   i, dp, db, dm);
+            printf("Worker %d: +%lu pkts, +%lu bytes, +%lu matched (total %lu)\n",
+                   i, dp, db, dm, cur_matched);
 
             prev_worker_pkts[i] = cur_pkts;
             prev_worker_bytes[i] = cur_bytes;
@@ -66,10 +60,10 @@ int stats_thread_proc(void *arg)
         uint64_t cur_tx_sent = __atomic_load_n(cfg->tx_sent, __ATOMIC_RELAXED);
         uint64_t cur_tx_dropped = __atomic_load_n(cfg->tx_dropped, __ATOMIC_RELAXED);
         uint64_t tx_sent = cur_tx_sent - prev_tx_sent;
-        uint64_t tx_dropped = cur_tx_dropped - prev_tx_dropped;
 
-        printf("TX: %lu sent, %lu dropped\n", tx_sent, tx_dropped);
-        printf("Total: %lu pkts, %lu bytes, %lu matched\n",
+        printf("TX: %lu sent, %lu dropped\n", tx_sent,
+               cur_tx_dropped - prev_tx_dropped);
+        printf("Total: +%lu pkts, +%lu bytes, +%lu matched\n",
                total_pkts, total_bytes, total_matched);
 
         if (cfg->interval_sec > 0 && total_pkts > 0) {
