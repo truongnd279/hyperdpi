@@ -32,6 +32,7 @@ struct flow_table;
 
 struct flow_table *flow_table_create(uint32_t max_entries);
 void flow_table_destroy(struct flow_table *ft);
+uint32_t flow_table_count(struct flow_table *ft);
 
 struct flow_entry *flow_table_lookup(struct flow_table *ft, const struct flow_key *key);
 struct flow_entry *flow_table_insert(struct flow_table *ft, const struct flow_key *key);

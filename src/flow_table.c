@@ -47,6 +47,12 @@ struct flow_table *flow_table_create(uint32_t max_entries)
     return ft;
 }
 
+uint32_t flow_table_count(struct flow_table *ft)
+{
+    if (!ft) return 0;
+    return __atomic_load_n(&ft->count, __ATOMIC_RELAXED);
+}
+
 void flow_table_destroy(struct flow_table *ft)
 {
     if (!ft) return;
