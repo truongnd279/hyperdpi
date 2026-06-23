@@ -55,7 +55,7 @@ static int port_init(uint16_t port_id, struct rte_mempool *pool)
             .max_lro_pkt_size = RTE_ETHER_MAX_LEN,
         },
         .txmode = {
-            .offloads = RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE,
+            .offloads = dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE,
         },
     };
 
